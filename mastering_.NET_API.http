@@ -1,0 +1,6 @@
+@mastering_.NET_API_HostAddress = http://localhost:5135
+
+GET {{mastering_.NET_API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
