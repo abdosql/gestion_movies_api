@@ -28,6 +28,7 @@ namespace mastering_.NET_API.Services
                 return true;
             }
             this.uploadState.Message = "Invalid file extension.";
+            this.uploadState.State = false;
             return false;
         }
 
@@ -39,6 +40,7 @@ namespace mastering_.NET_API.Services
                 return true;
             }
             this.uploadState.Message = "Image size must be less than 5 MB.";
+            this.uploadState.State = false;
             return false;
         }
 

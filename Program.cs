@@ -1,4 +1,7 @@
 using mastering_.NET_API.Data;
+using mastering_.NET_API.Helpers;
+using mastering_.NET_API.Repositories;
+using mastering_.NET_API.Repositories.Interfaces;
 using mastering_.NET_API.Services;
 using mastering_.NET_API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +13,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+{
+    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+});
+
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 
 builder.Services.AddCors();
@@ -18,7 +25,9 @@ builder.Services.AddDbContext<MyContext>(opt => {
     opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
+builder.Services.AddAutoMapper(typeof(MappingProfile));
 builder.Services.AddScoped<FileUpload>();
+builder.Services.AddScoped<IGenreRepository,GenreRepository>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(opt =>
@@ -69,6 +78,7 @@ builder.Services.AddSwaggerGen(opt =>
         }
     });
 });
+
 
 var app = builder.Build();
 

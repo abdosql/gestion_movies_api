@@ -4,6 +4,7 @@ using mastering_.NET_API.Models;
 using mastering_.NET_API.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace mastering_.NET_API.Controllers
@@ -62,11 +63,21 @@ namespace mastering_.NET_API.Controllers
             {
                 Newmovie.Image = this._fileUpload.uploadState.PhotoName;
             }
+            else
+            {
+                ModelState.AddModelError("Image", this._fileUpload.uploadState.Message);
+                return ValidationProblem();
+            }
 
             this._fileUpload.UploadImage(movie.Cover, "Uploads/MoviesCovers");
             if (this._fileUpload.uploadState.State)
             {
                 Newmovie.Cover = this._fileUpload.uploadState.PhotoName;
+            }
+            else
+            {
+                ModelState.AddModelError("Cover", this._fileUpload.uploadState.Message);
+                return ValidationProblem();
             }
 
             await this._context.AddAsync(Newmovie);
