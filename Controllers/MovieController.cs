@@ -1,11 +1,9 @@
-﻿using mastering_.NET_API.Dtos;
+﻿using mastering_.NET_API.Data;
+using mastering_.NET_API.Dtos;
 using mastering_.NET_API.Mappers;
 using mastering_.NET_API.Models;
-using mastering_.NET_API.Services;
-using Microsoft.AspNetCore.Http;
+using mastering_.NET_API.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.EntityFrameworkCore;
 
 namespace mastering_.NET_API.Controllers
 {
@@ -13,129 +11,119 @@ namespace mastering_.NET_API.Controllers
     [ApiController]
     public class MovieController : ControllerBase
     {
-        private MyContext _context;
-        private FileUpload _fileUpload;
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IFileStorageService _fileStorage;
 
-
-
-        public MovieController(MyContext context, FileUpload fileUpload)
+        public MovieController(IUnitOfWork unitOfWork, IFileStorageService fileStorage)
         {
-            this._context  = context;
-            this._fileUpload = fileUpload;
+            _unitOfWork = unitOfWork;
+            _fileStorage = fileStorage;
         }
-
-
-
 
         [HttpGet]
         public async Task<IActionResult> GetAllMovies()
         {
-            IList<Movie> movies = await this._context.Movies.Include(m => m.Genre).ToListAsync();
+            var movies = await _unitOfWork.Movies.GetAllAsync();
             return Ok(movies);
         }
-
-
-
-
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetMovieById(int id)
         {
-            Movie? movie = await this._context.Movies.Include(m => m.Genre).FirstOrDefaultAsync(m => m.Id == id);
-            if(movie == null)
+            var movie = await _unitOfWork.Movies.GetByIdAsync(id);
+            if (movie == null)
             {
-                return BadRequest();
+                return NotFound();
             }
             return Ok(movie);
         }
 
-
-
-
-
         [HttpPost]
-        public async Task<IActionResult> AddMovie(AddMovieDto movie)
+        public async Task<IActionResult> AddMovie([FromForm] AddMovieDto movieDto)
         {
-            Movie Newmovie = MovieMappers.getMovieFromAddMovieDto(movie);
+            var movie = MovieMappers.getMovieFromAddMovieDto(movieDto);
 
-            this._fileUpload.UploadImage(movie.Image, "Uploads/MoviesImages");
-            if (this._fileUpload.uploadState.State)
+            var (imageSuccess, imageName) = await _fileStorage.SaveFileAsync(movieDto.Image, "Uploads/MoviesImages");
+            if (!imageSuccess)
             {
-                Newmovie.Image = this._fileUpload.uploadState.PhotoName;
+                ModelState.AddModelError("Image", "Failed to upload image");
+                return ValidationProblem(ModelState);
             }
-            else
-            {
-                ModelState.AddModelError("Image", this._fileUpload.uploadState.Message);
-                return ValidationProblem();
-            }
+            movie.Image = imageName;
 
-            this._fileUpload.UploadImage(movie.Cover, "Uploads/MoviesCovers");
-            if (this._fileUpload.uploadState.State)
+            var (coverSuccess, coverName) = await _fileStorage.SaveFileAsync(movieDto.Cover, "Uploads/MoviesCovers");
+            if (!coverSuccess)
             {
-                Newmovie.Cover = this._fileUpload.uploadState.PhotoName;
+                await _fileStorage.DeleteFileAsync(imageName, "Uploads/MoviesImages");
+                ModelState.AddModelError("Cover", "Failed to upload cover");
+                return ValidationProblem(ModelState);
             }
-            else
-            {
-                ModelState.AddModelError("Cover", this._fileUpload.uploadState.Message);
-                return ValidationProblem();
-            }
+            movie.Cover = coverName;
 
-            await this._context.AddAsync(Newmovie);
-            await this._context.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetMovieById), new { id = Newmovie.Id }, Newmovie);
+            await _unitOfWork.Movies.AddAsync(movie);
+            await _unitOfWork.CompleteAsync();
+
+            return CreatedAtAction(nameof(GetMovieById), new { id = movie.Id }, movie);
         }
-
-
-
-
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateMovie(int id, UpdateMovieDto mv)
+        public async Task<IActionResult> UpdateMovie(int id, [FromForm] UpdateMovieDto movieDto)
         {
-
-            Movie? movie = await this._context.Movies.FirstOrDefaultAsync(m => m.Id == id);
+            var movie = await _unitOfWork.Movies.GetByIdAsync(id);
             if (movie == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            Movie Newmovie = MovieMappers.getMovieFromUpdateMovieDto(movie, mv);
-            this._fileUpload.DeleteImage(movie.Image, "Uploads/MoviesImages");
-            this._fileUpload.DeleteImage(movie.Cover, "Uploads/MoviesCovers");
+            var oldImage = movie.Image;
+            var oldCover = movie.Cover;
 
-            this._fileUpload.UploadImage(mv.Image, "Uploads/MoviesImages");
-            if (this._fileUpload.uploadState.State)
+            movie = MovieMappers.getMovieFromUpdateMovieDto(movie, movieDto);
+
+            if (movieDto.Image != null)
             {
-                movie.Image = this._fileUpload.uploadState.PhotoName;
+                var (imageSuccess, imageName) = await _fileStorage.SaveFileAsync(movieDto.Image, "Uploads/MoviesImages");
+                if (!imageSuccess)
+                {
+                    ModelState.AddModelError("Image", "Failed to upload new image");
+                    return ValidationProblem(ModelState);
+                }
+                movie.Image = imageName;
+                await _fileStorage.DeleteFileAsync(oldImage, "Uploads/MoviesImages");
             }
 
-            this._fileUpload.UploadImage(mv.Cover, "Uploads/MoviesCovers");
-            if (this._fileUpload.uploadState.State)
+            if (movieDto.Cover != null)
             {
-                movie.Cover = this._fileUpload.uploadState.PhotoName;
+                var (coverSuccess, coverName) = await _fileStorage.SaveFileAsync(movieDto.Cover, "Uploads/MoviesCovers");
+                if (!coverSuccess)
+                {
+                    ModelState.AddModelError("Cover", "Failed to upload new cover");
+                    return ValidationProblem(ModelState);
+                }
+                movie.Cover = coverName;
+                await _fileStorage.DeleteFileAsync(oldCover, "Uploads/MoviesCovers");
             }
-            await this._context.SaveChangesAsync();
+
+            await _unitOfWork.Movies.UpdateAsync(movie);
+            await _unitOfWork.CompleteAsync();
+
             return NoContent();
         }
-
-
-
-
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteMovie(int id)
         {
-            Movie? m = await this._context.Movies.SingleOrDefaultAsync(m => m.Id == id);
-            if (m == null)
+            var movie = await _unitOfWork.Movies.GetByIdAsync(id);
+            if (movie == null)
             {
-                return BadRequest();
+                return NotFound();
             }
 
-            this._fileUpload.DeleteImage(m.Image, "Uploads/MoviesImages");
-            this._fileUpload.DeleteImage(m.Cover, "Uploads/MoviesCovers");
+            await _fileStorage.DeleteFileAsync(movie.Image, "Uploads/MoviesImages");
+            await _fileStorage.DeleteFileAsync(movie.Cover, "Uploads/MoviesCovers");
 
-            this._context.Movies.Remove(m);
-            await this._context.SaveChangesAsync();
+            await _unitOfWork.Movies.DeleteAsync(movie);
+            await _unitOfWork.CompleteAsync();
 
             return NoContent();
         }

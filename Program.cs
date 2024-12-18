@@ -6,28 +6,32 @@ using mastering_.NET_API.Services;
 using mastering_.NET_API.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
 });
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 
 builder.Services.AddCors();
 builder.Services.AddDbContext<MyContext>(opt => {
     opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });
 
+// Register AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
-builder.Services.AddScoped<FileUpload>();
-builder.Services.AddScoped<IGenreRepository,GenreRepository>();
+
+// Register Services
+builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+builder.Services.AddHttpContextAccessor();
+
+// Register Repositories
+builder.Services.AddScoped<IGenreRepository, GenreRepository>();
+builder.Services.AddScoped<IMovieRepository, MovieRepository>();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(opt =>
@@ -35,8 +39,8 @@ builder.Services.AddSwaggerGen(opt =>
     opt.SwaggerDoc("v1", new OpenApiInfo
     {
         Version = "v1",
-        Title = "test API",
-        Description = "My API FIRST",
+        Title = "Movies API",
+        Description = "A RESTful API for managing movies and genres",
         TermsOfService = new Uri("https://mohammedkadi.vercel.app/"),
         Contact = new OpenApiContact
         {
@@ -46,39 +50,38 @@ builder.Services.AddSwaggerGen(opt =>
         },
         License = new OpenApiLicense
         {
-            Name = "My license",
+            Name = "API License",
             Url = new Uri("https://mohammedkadi.vercel.app/")
         }
     });
 
     opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Name = "",
+        Name = "Authorization",
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Enter you JWT Key"
+        Description = "Enter your JWT token"
     });
 
     opt.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
-           new OpenApiSecurityScheme
-           {
-               Reference = new OpenApiReference
-               {
-                   Type = ReferenceType.SecurityScheme,
-                   Id = "Bearer"
-               },
-               Name = "Bearer",
-               In = ParameterLocation.Header
-           },
-           new List<string>()
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                },
+                Name = "Bearer",
+                In = ParameterLocation.Header
+            },
+            new List<string>()
         }
     });
 });
-
 
 var app = builder.Build();
 
@@ -89,7 +92,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(
@@ -97,10 +99,8 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/files"
 });
 
-
 app.UseHttpsRedirection();
 
-//app.UseCors(c => c.AllowAnyHeader().AllowAnyMethod().WithOrigins("url1", "url2"));
 app.UseCors(c => c.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());
 
 app.UseAuthorization();
