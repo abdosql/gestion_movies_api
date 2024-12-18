@@ -1,4 +1,5 @@
-﻿using mastering_.NET_API.Repositories.Interfaces;
+﻿using mastering_.NET_API.Data;
+using mastering_.NET_API.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace mastering_.NET_API.Repositories
